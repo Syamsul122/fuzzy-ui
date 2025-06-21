@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fuzzy Tsukamoto Penilaian Peserta</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+      background: #f9f9f9;
+    }
+    h1 {
+      text-align: center;
+    }
+    input, button {
+      padding: 8px;
+      margin: 6px 0;
+      width: 100%;
+    }
+    .form-group {
+      margin-bottom: 12px;
+    }
+    button {
+      width: 48%;
+      margin-right: 2%;
+    }
+    .container {
+      max-width: 600px;
+      margin: auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px #ccc;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 25px;
+    }
+    th, td {
+      border: 1px solid #aaa;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background-color: #ddd;
+    }
+    .result {
+      margin-top: 20px;
+      font-weight: bold;
+      text-align: center;
+    }
+    .status-diterima {
+      color: green;
+      font-weight: bold;
+    }
+    .status-ditolak {
+      color: red;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Penilaian Peserta (Fuzzy Tsukamoto)</h1>
+    <div class="form-group">
+      <label>Nama:</label>
+      <input type="text" id="nama" placeholder="Nama peserta" />
+    </div>
+    <div class="form-group">
+      <label>Nilai Tes Tulis:</label>
+      <input type="number" id="tulis" placeholder="Masukkan nilai 0-100"/>
+    </div>
+    <div class="form-group">
+      <label>Nilai Keterampilan:</label>
+      <input type="number" id="keterampilan" placeholder="Masukkan nilai 0-100"/>
+    </div>
+    <div class="form-group">
+      <label>Nilai Wawancara:</label>
+      <input type="number" id="wawancara" placeholder="Masukkan nilai 40-100" />
+    </div>
+    <div class="form-group">
+      <label>Nilai Kesehatan:</label>
+      <input type="number" id="kesehatan" placeholder="Masukkan nilai 40-80"/>
+    </div>
+    <div class="form-group" style="display: flex; justify-content: space-between;">
+      <button onclick="submitData()">Kirim</button>
+      <button onclick="resetData()" style="background-color: red; color: white;">Reset</button>
+    </div>
+
+    <div id="hasil-container"></div>
+    <div id="spearman" class="result"></div>
+  </div>
+
+  <script>
+    const API_URL = "https://fuzzy-backend.onrender.com"; // Ubah ke IP Flask jika berbeda perangkat
+
+    async function submitData() {
+      const nama = document.getElementById("nama").value;
+      const tulis = parseFloat(document.getElementById("tulis").value);
+      const keterampilan = parseFloat(document.getElementById("keterampilan").value);
+      const wawancara = parseFloat(document.getElementById("wawancara").value);
+      const kesehatan = parseFloat(document.getElementById("kesehatan").value);
+
+      if ([tulis, keterampilan, wawancara, kesehatan].some(val => isNaN(val))) {
+        alert("Mohon isi semua nilai dengan benar.");
+        return;
+      }
+
+      // Validasi range
+      if (
+        tulis < 0 || tulis > 100 ||
+        keterampilan < 0 || keterampilan > 100 ||
+        wawancara < 40 || wawancara > 100 ||
+        kesehatan < 40 || kesehatan > 80
+      ) {
+        alert("Pastikan nilai berada dalam rentang yang sesuai.");
+        return;
+      }
+
+      const payload = {
+        nama: nama || `Peserta-${Math.floor(Math.random() * 1000)}`,
+        tulis,
+        keterampilan,
+        wawancara,
+        kesehatan
+      };
+
+      try {
+        const response = await fetch(`${API_URL}/fuzzy`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+        if (result.hasil) {
+          renderTable(result.hasil);
+          document.getElementById("spearman").textContent = `Spearman Rho: ${result.spearman_rho}`;
+        } else {
+          alert("Gagal: " + (result.error || "Terjadi kesalahan."));
+        }
+      } catch (error) {
+        alert("Terjadi kesalahan saat mengirim data.");
+      }
+    }
+
+    function renderTable(data) {
+      let html = `
+        <table>
+          <thead>
+            <tr>
+              <th>Nama</th>
+              <th>Pakar</th>
+              <th>Sistem</th>
+              <th>Rank Pakar</th>
+              <th>Rank Sistem</th>
+              <th>di</th>
+              <th>di²</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      data.forEach(item => {
+        const statusClass = item.status === "DITERIMA" ? "status-diterima" : "status-ditolak";
+        html += `
+          <tr>
+            <td>${item.nama}</td>
+            <td>${item.pakar}</td>
+            <td>${item.sistem}</td>
+            <td>${item.rank_pakar}</td>
+            <td>${item.rank_sistem}</td>
+            <td>${item.di}</td>
+            <td>${item.di2}</td>
+          </tr>
+        `;
+      });
+      html += "</tbody></table>";
+      document.getElementById("hasil-container").innerHTML = html;
+    }
+
+    async function resetData() {
+      try {
+        const res = await fetch(`${API_URL}/reset`, { method: "POST" });
+        const data = await res.json();
+        alert(data.status);
+        document.getElementById("hasil-container").innerHTML = "";
+        document.getElementById("spearman").textContent = "";
+      } catch (error) {
+        alert("Gagal mereset data.");
+      }
+    }
+  </script>
+</body>
+</html>
